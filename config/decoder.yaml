@@ -1,0 +1,20 @@
+# Parameters for the EMG -> elbow decoder (emg_decoder node).
+# Calibrate rest_level and mvc for each subject/electrode placement:
+#   ros2 run prosthetic_elbow_sim calibrate_emg <recording.csv> --out <this file>
+# decoder_type and model_file are set from the launch command
+# (decoder_type:=classifier model_file:=...); they override this file.
+emg_decoder:
+  ros__parameters:
+    use_sim_time: true
+    emg_rate_hz: 1000.0        # sampling rate of incoming EMG
+    window_ms: 150.0           # RMS envelope / feature window
+    control_rate_hz: 100.0     # rate of elbow commands
+    rest_level: [0.02, 0.02]   # [biceps, triceps] resting RMS (same units as EMG)
+    mvc: [0.50, 0.50]          # [biceps, triceps] RMS at max voluntary contraction
+    activation_threshold: 0.10 # proportional: normalised activation needed to move (deadband)
+    cocontraction_threshold: 0.25  # proportional: both above this -> hold (lock elbow)
+    vote_length: 5             # classifier: majority vote over last N decisions (N x 10 ms)
+    max_velocity: 1.5          # rad/s at 100% activation
+    elbow_min: 0.0             # rad
+    elbow_max: 2.53            # rad (145 deg)
+    command_topic: /elbow_position_controller/commands

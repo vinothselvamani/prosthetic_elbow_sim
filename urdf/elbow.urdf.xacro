@@ -1,0 +1,165 @@
+<?xml version="1.0"?>
+<!--
+  1-DoF transhumeral prosthetic elbow (flexion/extension).
+  The residual upper arm hangs vertically from a fixed "shoulder" mount.
+  Elbow angle 0 rad = fully extended (forearm pointing down),
+  positive angle = flexion (forearm swings forward, +x). Range 0-145 deg.
+  Masses roughly follow a powered prosthetic forearm + terminal device.
+-->
+<robot name="prosthetic_elbow" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- ===== Parameters (edit these for your device) ===== -->
+  <xacro:property name="PI" value="3.14159265359"/>
+  <xacro:property name="upper_len"   value="0.20"/>  <!-- residual limb + socket length [m] -->
+  <xacro:property name="upper_rad"   value="0.045"/>
+  <xacro:property name="upper_mass"  value="0.60"/>
+  <xacro:property name="fore_len"    value="0.26"/>  <!-- elbow axis to wrist [m] -->
+  <xacro:property name="fore_rad"    value="0.035"/>
+  <xacro:property name="fore_mass"   value="0.90"/>
+  <xacro:property name="hand_mass"   value="0.50"/>  <!-- terminal device -->
+  <xacro:property name="elbow_min"   value="0.0"/>
+  <xacro:property name="elbow_max"   value="${145*PI/180}"/>
+  <xacro:property name="elbow_effort"   value="12.0"/>  <!-- motor torque limit [Nm] -->
+  <xacro:property name="elbow_velocity" value="3.5"/>   <!-- [rad/s] (~200 deg/s) -->
+  <xacro:property name="shoulder_height" value="1.20"/>
+
+  <xacro:arg name="controllers_file" default="$(find prosthetic_elbow_sim)/config/controllers.yaml"/>
+
+  <!-- ===== Inertia helpers ===== -->
+  <xacro:macro name="cyl_inertia" params="m r h">
+    <inertia ixx="${m*(3*r*r+h*h)/12}" ixy="0" ixz="0"
+             iyy="${m*(3*r*r+h*h)/12}" iyz="0"
+             izz="${m*r*r/2}"/>
+  </xacro:macro>
+  <xacro:macro name="box_inertia" params="m x y z">
+    <inertia ixx="${m*(y*y+z*z)/12}" ixy="0" ixz="0"
+             iyy="${m*(x*x+z*z)/12}" iyz="0"
+             izz="${m*(x*x+y*y)/12}"/>
+  </xacro:macro>
+
+  <!-- ===== Links ===== -->
+  <link name="world"/>
+
+  <!-- small stand so the arm is visible above the ground plane -->
+  <link name="shoulder_mount">
+    <inertial>
+      <mass value="5.0"/>
+      <origin xyz="0 0 0"/>
+      <xacro:box_inertia m="5.0" x="0.10" y="0.10" z="0.05"/>
+    </inertial>
+    <visual>
+      <geometry><box size="0.10 0.10 0.05"/></geometry>
+      <material name="grey"><color rgba="0.4 0.4 0.4 1"/></material>
+    </visual>
+  </link>
+
+  <joint name="world_to_mount" type="fixed">
+    <parent link="world"/>
+    <child link="shoulder_mount"/>
+    <origin xyz="0 0 ${shoulder_height}" rpy="0 0 0"/>
+  </joint>
+
+  <link name="upper_arm">
+    <inertial>
+      <mass value="${upper_mass}"/>
+      <origin xyz="0 0 ${-upper_len/2}"/>
+      <xacro:cyl_inertia m="${upper_mass}" r="${upper_rad}" h="${upper_len}"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 ${-upper_len/2}"/>
+      <geometry><cylinder radius="${upper_rad}" length="${upper_len}"/></geometry>
+      <material name="skin"><color rgba="0.87 0.72 0.60 1"/></material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 ${-upper_len/2}"/>
+      <geometry><cylinder radius="${upper_rad}" length="${upper_len}"/></geometry>
+    </collision>
+  </link>
+
+  <joint name="mount_to_upper_arm" type="fixed">
+    <parent link="shoulder_mount"/>
+    <child link="upper_arm"/>
+    <origin xyz="0 0 -0.025"/>
+  </joint>
+
+  <link name="forearm">
+    <inertial>
+      <mass value="${fore_mass}"/>
+      <origin xyz="0 0 ${-fore_len/2}"/>
+      <xacro:cyl_inertia m="${fore_mass}" r="${fore_rad}" h="${fore_len}"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 ${-fore_len/2}"/>
+      <geometry><cylinder radius="${fore_rad}" length="${fore_len}"/></geometry>
+      <material name="carbon"><color rgba="0.15 0.15 0.18 1"/></material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 ${-fore_len/2}"/>
+      <geometry><cylinder radius="${fore_rad}" length="${fore_len}"/></geometry>
+    </collision>
+  </link>
+
+  <!-- the prosthetic elbow joint -->
+  <joint name="elbow_joint" type="revolute">
+    <parent link="upper_arm"/>
+    <child link="forearm"/>
+    <origin xyz="0 0 ${-upper_len}" rpy="0 0 0"/>
+    <axis xyz="0 -1 0"/>   <!-- +angle swings the forearm forward (+x) -->
+    <limit lower="${elbow_min}" upper="${elbow_max}"
+           effort="${elbow_effort}" velocity="${elbow_velocity}"/>
+    <dynamics damping="0.1" friction="0.05"/>
+  </joint>
+
+  <link name="hand">
+    <inertial>
+      <mass value="${hand_mass}"/>
+      <origin xyz="0 0 -0.05"/>
+      <xacro:box_inertia m="${hand_mass}" x="0.08" y="0.03" z="0.10"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 -0.05"/>
+      <geometry><box size="0.08 0.03 0.10"/></geometry>
+      <material name="blue"><color rgba="0.20 0.40 0.80 1"/></material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 -0.05"/>
+      <geometry><box size="0.08 0.03 0.10"/></geometry>
+    </collision>
+  </link>
+
+  <joint name="wrist_fixed" type="fixed">
+    <parent link="forearm"/>
+    <child link="hand"/>
+    <origin xyz="0 0 ${-fore_len}"/>
+  </joint>
+
+  <!-- ===== ros2_control: simulated hardware ===== -->
+  <ros2_control name="ProstheticElbowSystem" type="system">
+    <hardware>
+      <!-- Jazzy/Kilted/Lyrical + Gazebo Harmonic/Jetty.
+           Humble + Gazebo Fortress: use ign_ros2_control/IgnitionSystem -->
+      <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+    </hardware>
+    <joint name="elbow_joint">
+      <command_interface name="position">
+        <param name="min">${elbow_min}</param>
+        <param name="max">${elbow_max}</param>
+      </command_interface>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+      <state_interface name="velocity"/>
+      <state_interface name="effort"/>
+    </joint>
+  </ros2_control>
+
+  <gazebo>
+    <!-- Humble + Fortress: filename="ign_ros2_control-system"
+         name="ign_ros2_control::IgnitionROS2ControlPlugin" -->
+    <plugin filename="gz_ros2_control-system"
+            name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+      <parameters>$(arg controllers_file)</parameters>
+    </plugin>
+  </gazebo>
+
+</robot>
